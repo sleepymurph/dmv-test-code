@@ -246,7 +246,8 @@ if __name__ == "__main__":
                         result,
                         vcsclass,
                         data_gen=args.data_gen,
-                        tmpdir=tmpdir)
+                        tmpdir=tmpdir,
+                        reformat_partition=args.reformat_partition)
             except KeyboardInterrupt:
                 comment("Cancelled")
                 break
