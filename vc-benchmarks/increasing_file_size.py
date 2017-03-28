@@ -241,7 +241,7 @@ if __name__ == "__main__":
                         tmpdir=tmpdir)
             except KeyboardInterrupt:
                 comment("Cancelled")
-                raise
+                break
             except Exception as e:
                 comment(repr(e))
             finally:

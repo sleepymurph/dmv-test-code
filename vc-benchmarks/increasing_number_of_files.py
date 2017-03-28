@@ -243,7 +243,7 @@ if __name__ == "__main__":
                     reformat_partition=args.reformat_partition)
         except KeyboardInterrupt:
             comment("Cancelled")
-            raise
+            break
         except Exception as e:
             comment(repr(e))
         finally:
