@@ -1,8 +1,0 @@
-# Cargo.lock file for sub-libraries
-*/Cargo.lock
-
-# rust build directory
-target/
-
-# rustfmt backups
-*.rs.bk

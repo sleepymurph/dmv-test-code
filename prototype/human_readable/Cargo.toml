@@ -1,6 +1,0 @@
-[package]
-name = "human_readable"
-version = "0.1.0"
-authors = ["Mike Murphy <codermurph@sleepymurph.com>"]
-
-[dependencies]

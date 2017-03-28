@@ -1,4 +1,0 @@
-max_width = 80
-reorder_imports = true
-fn_single_line = true
-wrap_comments = true
