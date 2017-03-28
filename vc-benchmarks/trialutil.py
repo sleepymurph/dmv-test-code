@@ -304,12 +304,16 @@ def logcall(cmd, cwd=None, shell=False, env=None):
     print >> sys.stderr, "+ %s$ %s" % (cwd, cmd)
     sys.stderr.flush()
 
-    exitcode = subprocess.call(cmd, stdout=sys.stderr, cwd=cwd,
+    process = subprocess.Popen(cmd, stdout=sys.stderr, cwd=cwd,
                     shell=shell, env=env)
+
+    while process.returncode == None:
+        time.sleep(.1)
+        process.poll()
 
     sys.stderr.flush()
 
-    if exitcode!=0:
+    if process.returncode!=0:
         raise CallFailedError(cmd, exitcode)
 
 
