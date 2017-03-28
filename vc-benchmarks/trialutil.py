@@ -298,21 +298,51 @@ class CallFailedError(RuntimeError):
         return ("%s(cmd='%s', exitcode='%s')"
                 % (self.__class__.__name__, self.cmd, self.exitcode))
 
+class CallTimeoutError(RuntimeError):
+    def __init__(self, cmd, elapsed, killsignal):
+        self.cmd = cmd
+        self.elapsed = elapsed
+        self.killsignal = killsignal
+
+    def __str__(self):
+        return "Command killed after %.3fs (%s):" % (self.elapsed, self.killsignal, self.cmd)
+
+    def __repr__(self):
+        return ("%s(cmd='%s', elapsed=%.3f, killsignal='%s')"
+                % (self.__class__.__name__, self.cmd, self.elapsed, self.killsignal))
+
+global_logcall_timeout = None;
+global_logcall_cleanup_timeout = 10;    # Time between term and kill
+
 def logcall(cmd, cwd=None, shell=False, env=None):
     """ Prints and calls the shell command, redirecting all output to stderr """
 
     print >> sys.stderr, "+ %s$ %s" % (cwd, cmd)
     sys.stderr.flush()
 
+    start_moment = time.time()
+    timeout_exception = None
     process = subprocess.Popen(cmd, stdout=sys.stderr, cwd=cwd,
                     shell=shell, env=env)
 
     while process.returncode == None:
+        elapsed = time.time() - start_moment
+
+        if global_logcall_timeout != None:
+            if elapsed > global_logcall_timeout + global_logcall_cleanup_timeout:
+                timeout_exception = CallTimeoutError(cmd, elapsed, "SIGKILL")
+                process.kill()
+            elif elapsed > global_logcall_timeout:
+                timeout_exception = CallTimeoutError(cmd, elapsed, "SIGTERM")
+                process.terminate()
+
         time.sleep(.1)
         process.poll()
 
     sys.stderr.flush()
 
+    if timeout_exception != None:
+        raise timeout_exception
     if process.returncode!=0:
         raise CallFailedError(cmd, exitcode)
 
