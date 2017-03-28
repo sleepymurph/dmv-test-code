@@ -40,6 +40,9 @@ def parse_args():
     parser.add_argument("--tmp-dir", default="/tmp",
             help="directory in which to create and destroy test repos")
 
+    parser.add_argument("--timeout", default=None,
+            help="give up on subprocesses after a number of seconds")
+
     parser.add_argument("--reformat-partition", default=None,
             help="reformat this device instead of deleting files one-by-one")
 
@@ -204,6 +207,9 @@ if __name__ == "__main__":
     vcsclass = vcs.vcschoices[args.vcs]
     vcs_version = vcsclass.check_version()
 
+    if args.timeout:
+        trialutil.global_logcall_timeout = float(args.timeout)
+
     comment("Committing increasingly large numbers of files")
     comment()
     comment(align_kvs({
@@ -213,6 +219,7 @@ if __name__ == "__main__":
             "vcs": args.vcs,
             "vcs_version": vcs_version,
             "reformat_partition": args.reformat_partition,
+            "timeout": trialutil.global_logcall_timeout,
         }))
     comment()
     comment(align_kvs(env))
