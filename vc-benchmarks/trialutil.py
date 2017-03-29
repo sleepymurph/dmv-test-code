@@ -287,29 +287,32 @@ def log(msg):
 
 
 class CallFailedError(RuntimeError):
-    def __init__(self, cmd, exitcode):
+    def __init__(self, cmd, returncode):
         self.cmd = cmd
-        self.exitcode = exitcode
+        self.returncode = returncode
 
     def __str__(self):
-        return "Command failed (exit code %s): %s" % (self.exitcode, self.cmd)
+        return "Command failed (exit code %s): %s" % (self.returncode, self.cmd)
 
     def __repr__(self):
-        return ("%s(cmd='%s', exitcode='%s')"
-                % (self.__class__.__name__, self.cmd, self.exitcode))
+        return ("%s(cmd='%s', returncode='%s')"
+                % (self.__class__.__name__, self.cmd, self.returncode))
 
 class CallTimeoutError(RuntimeError):
     def __init__(self, cmd, elapsed, killsignal):
         self.cmd = cmd
         self.elapsed = elapsed
         self.killsignal = killsignal
+        self.returncode = None
 
     def __str__(self):
-        return "Command killed after %.3fs (%s):" % (self.elapsed, self.killsignal, self.cmd)
+        return "Command killed after %.3fs (%s, return code %d):" % (
+                    self.elapsed, self.killsignal, self.returncode, self.cmd)
 
     def __repr__(self):
-        return ("%s(cmd='%s', elapsed=%.3f, killsignal='%s')"
-                % (self.__class__.__name__, self.cmd, self.elapsed, self.killsignal))
+        return ("%s(cmd='%s', elapsed=%.3f, killsignal='%s', returncode=%d)"
+                % (self.__class__.__name__,
+                    self.cmd, self.elapsed, self.killsignal, self.returncode))
 
 global_logcall_timeout = None;
 global_logcall_cleanup_timeout = 10;    # Time between term and kill
@@ -322,29 +325,47 @@ def logcall(cmd, cwd=None, shell=False, env=None):
 
     start_moment = time.time()
     timeout_exception = None
-    process = subprocess.Popen(cmd, stdout=sys.stderr, cwd=cwd,
+    tried_terminate = False
+    tried_kill = False
+
+    # shell==True causes Python to execute a shell to execute the command, So
+    # the subprocess is actually the shell. If we kill that, the program we
+    # were trying to kill can still run in the background. The exec builtin
+    # replaces the shell with the command, which gets us back to where we want
+    # to be, in direct control of the process.
+    doctoredcmd = cmd
+    if shell:
+        doctoredcmd = "exec " + doctoredcmd
+
+    process = subprocess.Popen(doctoredcmd, stdout=sys.stderr, cwd=cwd,
                     shell=shell, env=env)
 
-    while process.returncode == None:
+    while process.poll() == None:
         elapsed = time.time() - start_moment
 
         if global_logcall_timeout != None:
-            if elapsed > global_logcall_timeout + global_logcall_cleanup_timeout:
+            if elapsed > global_logcall_timeout + global_logcall_cleanup_timeout and not tried_kill:
+                log("Attempting to kill after %.0fs: %s" % (elapsed, cmd))
                 timeout_exception = CallTimeoutError(cmd, elapsed, "SIGKILL")
                 process.kill()
-            elif elapsed > global_logcall_timeout:
+                tried_kill = True
+
+            elif elapsed > global_logcall_timeout and not tried_terminate:
+                log("Attempting to terminate after %.0fs: %s" % (elapsed, cmd))
                 timeout_exception = CallTimeoutError(cmd, elapsed, "SIGTERM")
                 process.terminate()
+                tried_terminate = True
 
         time.sleep(.1)
-        process.poll()
 
+    log("Process exited with return code %d   " % process.returncode)
     sys.stderr.flush()
 
     if timeout_exception != None:
+        timeout_exception.returncode = process.returncode
         raise timeout_exception
     if process.returncode!=0:
-        raise CallFailedError(cmd, exitcode)
+        raise CallFailedError(cmd, process.returncode)
 
 
 def align_kvs(kvs):
