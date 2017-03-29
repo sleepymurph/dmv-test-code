@@ -238,20 +238,23 @@ if __name__ == "__main__":
     if args.reformat_partition:
         reformat_device(args.reformat_partition)
 
-    for filecount in base10trials(args.start_mag, args.end_mag, args.mag_steps):
+    try:
+        for filecount in base10trials(args.start_mag, args.end_mag, args.mag_steps):
 
-        result = TrialStats(filecount, eachfilebytes)
-        try:
-            run_trial(
-                    result,
-                    vcsclass,
-                    data_gen=args.data_gen,
-                    tmpdir=tmpdir,
-                    reformat_partition=args.reformat_partition)
-        except KeyboardInterrupt:
-            comment("Cancelled")
-            break
-        except Exception as e:
-            comment(repr(e))
-        finally:
-            printrow(TrialStats.columns, result)
+            result = TrialStats(filecount, eachfilebytes)
+            try:
+                run_trial(
+                        result,
+                        vcsclass,
+                        data_gen=args.data_gen,
+                        tmpdir=tmpdir,
+                        reformat_partition=args.reformat_partition)
+            except KeyboardInterrupt:
+                comment("Cancelled")
+                raise
+            except Exception as e:
+                comment(repr(e))
+            finally:
+                printrow(TrialStats.columns, result)
+    except KeyboardInterrupt:
+        comment("Cancelled")

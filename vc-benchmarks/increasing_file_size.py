@@ -235,23 +235,26 @@ if __name__ == "__main__":
     if args.reformat_partition:
         reformat_device(args.reformat_partition)
 
-    for mag in range(args.start_mag, args.end_mag):
+    try:
+        for mag in range(args.start_mag, args.end_mag):
 
-        for step in range(0, args.mag_steps):
-            bytesperstep = 2**mag / args.mag_steps
-            filebytes = 2**mag + step*bytesperstep
-            result = TrialStats(filebytes)
-            try:
-                run_trial(
-                        result,
-                        vcsclass,
-                        data_gen=args.data_gen,
-                        tmpdir=tmpdir,
-                        reformat_partition=args.reformat_partition)
-            except KeyboardInterrupt:
-                comment("Cancelled")
-                break
-            except Exception as e:
-                comment(repr(e))
-            finally:
-                printrow(TrialStats.columns, result)
+            for step in range(0, args.mag_steps):
+                bytesperstep = 2**mag / args.mag_steps
+                filebytes = 2**mag + step*bytesperstep
+                result = TrialStats(filebytes)
+                try:
+                    run_trial(
+                            result,
+                            vcsclass,
+                            data_gen=args.data_gen,
+                            tmpdir=tmpdir,
+                            reformat_partition=args.reformat_partition)
+                except KeyboardInterrupt:
+                    comment("Cancelled")
+                    raise
+                except Exception as e:
+                    comment(repr(e))
+                finally:
+                    printrow(TrialStats.columns, result)
+    except KeyboardInterrupt:
+        comment("Cancelled")
