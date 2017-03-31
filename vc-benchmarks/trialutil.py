@@ -345,13 +345,13 @@ def logcall(cmd, cwd=None, shell=False, env=None):
 
         if global_logcall_timeout != None:
             if elapsed > global_logcall_timeout + global_logcall_cleanup_timeout and not tried_kill:
-                log("Attempting to kill after %.0fs: %s" % (elapsed, cmd))
+                comment("Timeout: %.0fs, sending SIGKILL: %s" % (elapsed, cmd))
                 timeout_exception = CallTimeoutError(cmd, elapsed, "SIGKILL")
                 process.kill()
                 tried_kill = True
 
             elif elapsed > global_logcall_timeout and not tried_terminate:
-                log("Attempting to terminate after %.0fs: %s" % (elapsed, cmd))
+                comment("Timeout: %.0fs, sending SIGTERM: %s" % (elapsed, cmd))
                 timeout_exception = CallTimeoutError(cmd, elapsed, "SIGTERM")
                 process.terminate()
                 tried_terminate = True
