@@ -927,13 +927,16 @@ class RepoVerifier(object):
                         "Commit error, however commit seems ok and repo intact."
                         + " Original Error: " + repr(exc_value.original_exc))
                 return True
-            # If the commit failed, but was then verified, and now the repo is
-            # corrupt, then raise a new exception to notify the calling code of
-            # the situation.
+            # If the commit failed, but was then verified, and then now the repo
+            # cannot be verified. This means either that the repo is corrupt or
+            # simply that the fsck reported an error (a known issue with Git).
+            # Record the error but surpress the exception. Let the trail continue.
             elif self.result == VerificationResults.value('bad'):
-                raise CorruptRepoException(
-                        "Commit command failed. Commit written. Repo corrupt."
+                comment(
+                        "Commit command failed, but commit written."
+                        + " Verify returned error: either repo corrupt or verify failed."
                         + " Original commit error: " + repr(exc_value.original_exc))
+                return True
 
 class RepoVerifierTests(unittest.TestCase):
     class DummyObj: pass
@@ -1006,7 +1009,7 @@ class RepoVerifierTests(unittest.TestCase):
         result = self.DummyObj()
 
         rv = RepoVerifier(repo, obj=result, attr='verify')
-        with self.assertRaises(CorruptRepoException), rv:
+        with rv:
             raise CommitFailedButVerifiedException(self.DummyException())
         self.assertEqual(rv.result, 'bad')
         self.assertEqual(result.verify, 'bad')
