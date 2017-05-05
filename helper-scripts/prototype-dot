@@ -1,0 +1,168 @@
+#!/usr/bin/perl
+
+use strict;
+
+# @refs will be a list of refs given on the command line
+# %seen is a hash of identifiers to boolean true, just indicating that the object has been seen
+# @links will be a list of tuples(lists) (start,end,label)
+our (@refs,%commits,%trees,%chunkedblobs,%blobs,%seen,@links);
+
+sub short_hash {
+    my $hash=$_[0];
+    return substr($hash,0,7)
+}
+
+sub parse_args() {
+    # Default to master branch if none listed
+    if (! @ARGV) {
+        push(@ARGV, "master");
+    }
+    my $cmd = "prototype log --hash-only ";
+    print "$cmd\n";
+    my $commit_list = qx{$cmd};
+    my @commit_list = split("\n", $commit_list);
+    print join("\n", @commit_list);
+    print "\n\n";
+    return @commit_list;
+}
+
+sub examine_hashes {
+    while (my $hash = shift) {
+        examine_hash($hash);
+    }
+}
+
+sub examine_hash {
+    my $hash = $_[0];
+    return if $seen{$hash};
+    $seen{$hash} = 1;
+
+    my $type = qx{prototype show-object -t $hash}; chomp $type;
+    $type = lc($type);
+
+    print "examining {$hash} ($type) - ";
+
+    if ($type eq 'commit') {
+        my $commit_text = qx{prototype show-object $hash};
+        my @new_links = $commit_text =~ /^(?:Tree|Parents):\s*([0-9a-f]{40})$/mg;
+        my ($msg) = $commit_text =~ /Parents:.*?\n\n(.+?)$/m;
+        my $linkjoin = join(',',@new_links);
+        print "msg: $msg, links: $linkjoin\n";
+        $commits{$hash} = $msg;
+
+        my $refs_text = qx{ prototype show-ref \\
+                            | grep $hash \\
+                            | awk "{print \\\$2}" };
+        my @refs_list = split("\n", $refs_text);
+        while (my ($i,$ref) = each @refs_list) {
+            push(@refs, $ref);
+            push(@links, [$ref,$hash]);
+        }
+
+        for my $link (@new_links) {
+            push(@links, [$hash,$link]);
+            examine_hash($link);
+        }
+    }
+
+    elsif ($type eq 'tree') {
+        print "TREE\n";
+        $trees{$hash} = 1;
+        my $tree_text = qx{prototype show-object $hash | tail -n+5};
+        my @tree_lines = split(/\n/, $tree_text);
+        while (my ($i, $line) = each @tree_lines) {
+            my ($chash, $cpath) = $line =~ /(\w+)\s+(.*)/;
+            push(@links, [$hash,$chash,$cpath]);
+            examine_hash($chash);
+        }
+    }
+
+    elsif ($type eq 'blob') {
+        my $blob_text = qx{prototype show-object $hash | head -n 4};
+        $blobs{$hash} = $blob_text;
+        print "BLOB\n";
+    }
+
+    elsif ($type eq 'chunked blob index') {
+        print "CHUNKED\n";
+        $chunkedblobs{$hash} = 1;
+        my $cb_text = qx{prototype show-object $hash | tail -n+8};
+        my @cb_lines = split(/\n/, $cb_text);
+        while (my ($i, $line) = each @cb_lines) {
+            my ($coffset, $chash) = $line =~ /(\w+)\s+[\d.]+ \w+\s+(.*)/;
+            push(@links, [$hash,$chash,$coffset]);
+            examine_hash($chash);
+        }
+    }
+}
+
+sub print_refs {
+    print "\n\n// Refs\n{\n";
+    while (my ($i, $ref) = each @refs) {
+        print qq{   "$ref";\n};
+    }
+    print "}\n";
+}
+
+sub print_commits {
+    print "\n\n// Commits\n{\n  rank=same\n";
+    while (my ($hash, $msg) = each %commits) {
+        my $short = short_hash($hash);
+        $msg =~ s/(["])/\\$1/g;
+        print qq{   "$hash"\[label="Commit $short\\n$msg"\]\n};
+    }
+    print "\}\n";
+}
+
+sub print_trees {
+    print "\n\n// Trees\n{\n\n";
+    while (my ($hash) = each %trees) {
+        my $short = short_hash($hash);
+        print qq{   "$hash"\[label="Tree\\n$short"\]\n};
+    }
+    print "\}\n";
+}
+
+sub print_chunkedblobs {
+    print "\n\n// Chunked Blobs\n{\n\n";
+    while (my ($hash) = each %chunkedblobs) {
+        my $short = short_hash($hash);
+        print qq{   "$hash"\[label="Chunked Index\\n$short"\]\n};
+    }
+    print "\}\n";
+}
+
+sub print_blobs {
+    print "\n\n// Blobs\n{\n\n";
+    while (my ($hash, $msg) = each %blobs) {
+        my $short = short_hash($hash);
+        print qq{   "$hash"\[label="Blob\\n$short"\]\n};
+    }
+    print "\}\n";
+}
+
+sub print_links {
+    print "\n\n// Links\n";
+    for my $i (0 .. $#links) {
+        my ($start, $end, $label) = ($links[$i][0], $links[$i][1], $links[$i][2]);
+        print qq{"$start" -> "$end"};
+        print qq{ \[label="$label"\]} if $label;
+        print qq{\n};
+    }
+}
+
+print "/* ------------------------ \n\n";
+my @commits = parse_args();
+examine_hashes(@commits);
+print "\n\n * ------------------------ */ \n\n";
+
+print "digraph prototype {\n";
+
+print_refs();
+print_commits();
+print_trees();
+print_chunkedblobs();
+print_blobs();
+print_links();
+
+print "\n}\n";
