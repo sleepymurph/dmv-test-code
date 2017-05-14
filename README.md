@@ -85,12 +85,15 @@ command-line argument parsing. So you can see available options with
 run is also included in the output, along with other environment and program
 version data, so that results can be checked and experiments can be duplicated.
 
+The scripts also print their own command lines in their data files, so you can
+look at previous data files to see how to duplicate the experiment.
+
 
 Data
 --------------------------------------------------
 
-Experiment results data is in the [DMV Publications repository](
-https://github.com/sleepymurph/dmv-publications).
+Experiment results data used in the report is in the [DMV Publications
+repository]( https://github.com/sleepymurph/dmv-publications).
 
 
 More About DMV
