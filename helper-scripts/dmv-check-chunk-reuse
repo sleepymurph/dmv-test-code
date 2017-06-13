@@ -1,0 +1,114 @@
+#!/usr/bin/perl
+
+use strict;
+
+# @refs will be a list of refs given on the command line
+# %seen is a hash of identifiers to an integer, indicating the count of times
+#   the object has been seen
+# @links will be a list of tuples(lists) (start,end,label)
+our (@refs,%commits,%trees,%chunkedblobs,%blobs,%seen,@links);
+
+sub short_hash {
+    my $hash=$_[0];
+    return substr($hash,0,7)
+}
+
+sub parse_args() {
+    # Default to master branch if none listed
+    if (! @ARGV) {
+        push(@ARGV, "master");
+    }
+    my $cmd = "dmv log --hash-only ";
+    print "$cmd\n";
+    my $commit_list = qx{$cmd};
+    my @commit_list = split("\n", $commit_list);
+    print join("\n", @commit_list);
+    print "\n\n";
+    return @commit_list;
+}
+
+sub examine_hashes {
+    while (my $hash = shift) {
+        examine_hash($hash);
+    }
+}
+
+sub examine_hash {
+    my $hash = $_[0];
+    if ($seen{$hash}) {
+        $seen{$hash} += 1;
+        return;
+    } else {
+        $seen{$hash} = 1;
+    }
+
+    my $type = qx{dmv show-object -t $hash}; chomp $type;
+    $type = lc($type);
+
+    print "// examining {$hash} ($type) - ";
+
+    if ($type eq 'commit') {
+        my $commit_text = qx{dmv show-object $hash};
+        my @new_links = $commit_text =~ /^(?:Tree|Parents):\s*([0-9a-f]{40})$/mg;
+        my ($msg) = $commit_text =~ /Parents:.*?\n\n(.+?)$/m;
+        my $linkjoin = join(',',@new_links);
+        print "msg: $msg, links: $linkjoin\n";
+        $commits{$hash} = $msg;
+
+        my $refs_text = qx{ dmv show-ref \\
+                            | grep $hash \\
+                            | awk "{print \\\$2}" };
+        my @refs_list = split("\n", $refs_text);
+        while (my ($i,$ref) = each @refs_list) {
+            push(@refs, $ref);
+            push(@links, [$ref,$hash]);
+        }
+
+        for my $link (@new_links) {
+            push(@links, [$hash,$link]);
+            examine_hash($link);
+        }
+    }
+
+    elsif ($type eq 'tree') {
+        print "TREE\n";
+        $trees{$hash} = 1;
+        my $tree_text = qx{dmv show-object $hash | tail -n+5};
+        my @tree_lines = split(/\n/, $tree_text);
+        while (my ($i, $line) = each @tree_lines) {
+            my ($chash, $cpath) = $line =~ /(\w+)\s+(.*)/;
+            push(@links, [$hash,$chash,$cpath]);
+            examine_hash($chash);
+        }
+    }
+
+    elsif ($type eq 'blob') {
+        my $blob_text = qx{dmv show-object $hash | head -n 4};
+        $blobs{$hash} = $blob_text;
+        print "BLOB\n";
+    }
+
+    elsif ($type eq 'chunked blob index') {
+        print "CHUNKED\n";
+        $chunkedblobs{$hash} = 1;
+        my $cb_text = qx{dmv show-object $hash | tail -n+8};
+        my @cb_lines = split(/\n/, $cb_text);
+        while (my ($i, $line) = each @cb_lines) {
+            my ($coffset, $chash) = $line =~ /(\w+)\s+[\d.]+ \w+\s+(.*)/;
+            push(@links, [$hash,$chash,$coffset]);
+            examine_hash($chash);
+        }
+    }
+}
+
+sub print_seen {
+    print "\n\n// Seen counts\n";
+    while (my ($hash, $count) = each %seen) {
+        print qq{$count\t$hash\n};
+    }
+}
+
+my @commits = parse_args();
+examine_hashes(@commits);
+
+print_seen();
